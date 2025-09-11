@@ -1,4 +1,4 @@
-#!/Users/azhanfarooqui/Desktop/auth-api2/.venv/bin/python3.11
+#!/Users/azhanfarooqui/Desktop/auth-api2/.venv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys

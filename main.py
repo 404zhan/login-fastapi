@@ -2,8 +2,7 @@
 import tkinter as tk
 from tkinter import messagebox
 import requests
-import sys
-import subprocess
+
 
 API_URL = "http://127.0.0.1:8000"  # Your FastAPI backend
 
