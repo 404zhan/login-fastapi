@@ -5,7 +5,7 @@ import requests
 import pygame
 import random
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = "https://login-fastapi-d29w.onrender.com"
 
 # ---------------- Game 1: Bouncing Ball ----------------
 def bouncing_ball():

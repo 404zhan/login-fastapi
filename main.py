@@ -1,11 +1,9 @@
-# main.py
 import tkinter as tk
 from tkinter import messagebox
 import requests
+import time
 
-
-API_URL = "http://127.0.0.1:8000"  # Your FastAPI backend
-
+API_URL = "https://login-fastapi-d29w.onrender.com"  # Your FastAPI backend
 
 # ------------------ Login Function ------------------
 def login_user():
@@ -13,25 +11,35 @@ def login_user():
     password = entry_password.get()
 
     try:
-        # Use OAuth2PasswordRequestForm compatible data
         data = {"username": username, "password": password}
-        response = requests.post(f"{API_URL}/login", data=data)
+        response = requests.post(f"{API_URL}/login", data=data, timeout=10)
+        # Raise exception for bad HTTP status
+        response.raise_for_status()
 
-        if response.status_code == 200:
-            token = response.json()["access_token"]
+        try:
+            resp_json = response.json()
+        except ValueError:
+            messagebox.showerror("Error", f"Server returned invalid response:\n{response.text}")
+            return
+
+        token = resp_json.get("access_token")
+        if token:
             messagebox.showinfo("Login Successful", f"Welcome {username}!")
             root.destroy()  # close login window
             import dummyapp
             dummyapp.run_app(token)
-
-
         else:
-            messagebox.showerror("Login Failed", response.json()["detail"])
-    except Exception as e:
-        messagebox.showerror("Error", f"Could not connect to server: {e}")
+            messagebox.showerror("Login Failed", resp_json.get("detail", "Unknown error"))
+
+    except requests.exceptions.ConnectionError:
+        messagebox.showerror("Error", "Could not connect to server. The server might be asleep, try again in a few seconds.")
+    except requests.exceptions.Timeout:
+        messagebox.showerror("Error", "Request timed out. Try again.")
+    except requests.exceptions.HTTPError as e:
+        messagebox.showerror("Error", f"HTTP error: {e}")
 
 
-# ------------------ Registration Window ------------------
+# ------------------ Registration Function ------------------
 def open_register():
     reg_win = tk.Toplevel(root)
     reg_win.title("Register")
@@ -48,15 +56,29 @@ def open_register():
         uname = entry_reg_username.get()
         pwd = entry_reg_password.get()
         try:
-            # Default role is "user" for new registrations
+            data = {"username": uname, "password": pwd}
             response = requests.post(f"{API_URL}/register", params={"username": uname, "password": pwd})
-            if response.status_code == 200:
-                messagebox.showinfo("Success", "Registration successful! Please login.")
-                reg_win.destroy()
-            else:
-                messagebox.showerror("Error", response.json()["detail"])
-        except Exception as e:
-            messagebox.showerror("Error", f"Could not connect to server: {e}")
+            response.raise_for_status()
+
+            try:
+                resp_json = response.json()
+            except ValueError:
+                messagebox.showerror("Error", f"Server returned invalid response:\n{response.text}")
+                return
+
+            messagebox.showinfo("Success", resp_json.get("msg", "Registration successful! Please login."))
+            reg_win.destroy()
+
+        except requests.exceptions.ConnectionError:
+            messagebox.showerror("Error", "Could not connect to server. The server might be asleep, try again in a few seconds.")
+        except requests.exceptions.Timeout:
+            messagebox.showerror("Error", "Request timed out. Try again.")
+        except requests.exceptions.HTTPError as e:
+            try:
+                error_json = response.json()
+                messagebox.showerror("Error", error_json.get("detail", str(e)))
+            except ValueError:
+                messagebox.showerror("Error", f"HTTP error: {e}")
 
     tk.Button(reg_win, text="Register", command=register_user).grid(row=2, column=0, columnspan=2)
 

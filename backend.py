@@ -1,16 +1,32 @@
 # backend.py
+import os
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from sqlalchemy import Column, Integer, String, create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 import jwt, datetime
+from dotenv import load_dotenv
 
-# ---- Database Setup ----
-DATABASE_URL = "sqlite:///./users.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
+# Load .env file
+load_dotenv()
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecret")  # fallback for local dev
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 class User(Base):
     __tablename__ = "users"
@@ -23,19 +39,11 @@ Base.metadata.create_all(bind=engine)
 
 # ---- Security ----
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-SECRET_KEY = "supersecretkey"
-ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # ---- FastAPI App ----
 app = FastAPI()
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 def verify_password(plain, hashed):
     return pwd_context.verify(plain, hashed)
@@ -57,6 +65,7 @@ def register(username: str, password: str, role: str = "user", db: Session = Dep
     db.add(user)
     db.commit()
     db.refresh(user)
+    print("Using DB:", DATABASE_URL)
     return {"msg": "User registered", "username": user.username, "role": user.role}
 
 @app.post("/login")
