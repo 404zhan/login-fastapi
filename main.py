@@ -3,7 +3,7 @@ from tkinter import messagebox
 import requests
 import time
 
-API_URL = "https://login-fastapi-d29w.onrender.com"  # Your FastAPI backend
+API_URL = "https://login-fastapi-qalf.onrender.com"  # Your FastAPI backend
 
 # ------------------ Login Function ------------------
 def login_user():
@@ -96,6 +96,6 @@ entry_username.grid(row=0, column=1)
 entry_password.grid(row=1, column=1)
 
 tk.Button(root, text="Login", command=login_user).grid(row=2, column=0, columnspan=2)
-tk.Button(root, text="Register", command=open_register).grid(row=3, column=0, columnspan=2)
+tk.Button(root, text="New User?", command=open_register).grid(row=3, column=0, columnspan=2)
 
 root.mainloop()
