@@ -47,11 +47,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 app = FastAPI()
 
 
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain, hashed)
+def hash_password(password: str) -> str:
+    password_bytes = password[:72].encode()  # truncate to 72 chars
+    return pwd_context.hash(password_bytes)
 
-def hash_password(password):
-    return pwd_context.hash(password)
+def verify_password(plain: str, hashed: str) -> bool:
+    plain_bytes = plain[:72].encode()
+    return pwd_context.verify(plain_bytes, hashed)
+
 
 def create_access_token(data: dict):
     expire = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
