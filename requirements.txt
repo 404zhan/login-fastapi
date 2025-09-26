@@ -1,6 +1,6 @@
 annotated-types
 anyio
-bcrypt
+bcrypt==4.0.1
 certifi
 charset-normalizer
 click
@@ -16,7 +16,7 @@ Jinja2
 markdown-it-py
 MarkupSafe
 mdurl
-passlib
+passlib[bcrypt]==1.8.1
 pydantic
 pydantic_core
 PyJWT

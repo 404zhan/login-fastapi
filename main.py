@@ -24,10 +24,18 @@ def login_user():
 
         token = resp_json.get("access_token")
         if token:
-            messagebox.showinfo("Login Successful", f"Welcome {username}!")
-            root.destroy()  # close login window
+            # Fetch role using /me
+            headers = {"Authorization": f"Bearer {token}"}
+            me_resp = requests.get(f"{API_URL}/me", headers=headers)
+            me_resp.raise_for_status()
+            user_info = me_resp.json()
+            role = user_info.get("role", "dealer")
+
+            messagebox.showinfo("Login Successful", f"Welcome {username}! Role: {role}")
+            root.destroy()
             import dummyapp
-            dummyapp.run_app(token)
+            dummyapp.run_app(token, role)  # <-- pass role along
+
         else:
             messagebox.showerror("Login Failed", resp_json.get("detail", "Unknown error"))
 
@@ -57,7 +65,7 @@ def open_register():
         pwd = entry_reg_password.get()
         try:
             data = {"username": uname, "password": pwd}
-            response = requests.post(f"{API_URL}/register", params={"username": uname, "password": pwd})
+            response = requests.post(f"{API_URL}/register?username={uname}&password={pwd}")
             response.raise_for_status()
 
             try:
