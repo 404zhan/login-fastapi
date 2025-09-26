@@ -8,6 +8,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base, Session
 import jwt, datetime
 from dotenv import load_dotenv
 
+ROLES = [ "dealer", "factory", "service", "management", "r&d", "admin"]
+
 
 # Load .env file
 load_dotenv()
@@ -33,7 +35,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     password = Column(String)
-    role = Column(String, default="user")
+    role = Column(String, default="dealer")
 
 Base.metadata.create_all(bind=engine)
 
@@ -56,17 +58,40 @@ def create_access_token(data: dict):
     data.update({"exp": expire})
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user = db.query(User).filter(User.username == payload["sub"]).first()
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+
+def role_required(required_roles: list[str]):
+    def wrapper(user: User = Depends(get_current_user)):
+        if user.role not in required_roles:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+        return user
+    return wrapper
+
+
 # ---- Routes ----
 @app.post("/register")
-def register(username: str, password: str, role: str = "user", db: Session = Depends(get_db)):
+def register(username: str, password: str, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
-    user = User(username=username, password=hash_password(password), role=role)
+    # Always assign default role
+    user = User(username=username, password=hash_password(password), role="dealer")
     db.add(user)
     db.commit()
     db.refresh(user)
-    print("Using DB:", DATABASE_URL)
     return {"msg": "User registered", "username": user.username, "role": user.role}
+
 
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -77,14 +102,33 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return {"access_token": token, "token_type": "bearer"}
 
 @app.get("/me")
-def get_me(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return {"username": payload["sub"], "role": payload["role"]}
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+def get_me(current_user: User = Depends(get_current_user)):
+    return {"username": current_user.username, "role": current_user.role}
+
+
+
+@app.post("/assignrole")
+def assign_role(username: str, new_role: str, current_user: User = Depends(get_current_user),
+                db: Session = Depends(get_db)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can assign roles")
+
+    if new_role.lower() not in ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.role = new_role
+    db.commit()
+    return {"msg": f"Role updated for {username}", "new_role": new_role}
+
+@app.get("/admin-dashboard")
+def admin_dashboard(user: User = Depends(role_required(["admin"]))):
+    return {"msg": "Welcome Admin"}
+
+
 
 # ---- Seed Admin Only ----
 def seed_admin():
