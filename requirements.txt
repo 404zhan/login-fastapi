@@ -4,6 +4,6 @@ SQLAlchemy
 psycopg2-binary
 python-dotenv
 python-multipart
-passlib[bcrypt]==4.0.1
+passlib[bcrypt]
 python-jose
 PyJWT
