@@ -54,7 +54,6 @@ Base.metadata.create_all(bind=engine)
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
-    bcrypt__rounds=12,  # optional, secure default
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -62,12 +61,12 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 app = FastAPI()
 
 def hash_password(password: str) -> str:
-    password_bytes = password[:72].encode()  # truncate to 72 chars
-    return pwd_context.hash(password_bytes)
+    return pwd_context.hash(password[:72])
+
 
 def verify_password(plain: str, hashed: str) -> bool:
-    plain_bytes = plain[:72].encode()
-    return pwd_context.verify(plain_bytes, hashed)
+    return pwd_context.verify(plain[:72], hashed)
+
 
 def create_access_token(data: dict):
     expire = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
