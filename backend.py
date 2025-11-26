@@ -14,10 +14,23 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
-# Use local SQLite DB for testing if DATABASE_URL not set
+# DATABASE SETUP
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
+if not DATABASE_URL:
+    # Fallback to SQLite for local development
+    DATABASE_URL = "sqlite:///./local.db"
+
+# Render Postgres URLs sometimes start with "postgres://"
+# SQLAlchemy requires "postgresql+psycopg2://"
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://")
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
