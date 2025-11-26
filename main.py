@@ -1,109 +1,205 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 import requests
-import time
+import threading
+from PIL import Image, ImageTk, ImageSequence
 
-API_URL = "https://login-fastapi-qalf.onrender.com"  # Your FastAPI backend
+API_URL = "https://login-fastapi-qalf.onrender.com"
 
-# ------------------ Login Function ------------------
+
+# ------------------ GIF Loader Widget ------------------
+class GIFPlayer(ttk.Label):
+    def __init__(self, parent, gif_path):
+        super().__init__(parent)
+        self.frames = []
+        im = Image.open(gif_path)
+
+        for frame in ImageSequence.Iterator(im):
+            frame = frame.resize((40, 40), Image.LANCZOS)
+            self.frames.append(ImageTk.PhotoImage(frame))
+
+        self.index = 0
+        self.animating = False
+
+    def start(self):
+        self.animating = True
+        self.animate()
+
+    def animate(self):
+        if not self.animating:
+            return
+        self.configure(image=self.frames[self.index])
+        self.index = (self.index + 1) % len(self.frames)
+        self.after(50, self.animate)
+
+    def stop(self):
+        self.animating = False
+        self.grid_remove()
+
+
+# ------------------ Background Login Worker ------------------
+def perform_login(username, password, loader, btn_login, btn_register, root):
+    try:
+        data = {"username": username, "password": password}
+        res = requests.post(f"{API_URL}/login", data=data, timeout=10)
+        res.raise_for_status()
+
+        token = res.json().get("access_token")
+        if not token:
+            raise ValueError("Invalid credentials")
+
+        headers = {"Authorization": f"Bearer {token}"}
+        me = requests.get(f"{API_URL}/me", headers=headers)
+        me.raise_for_status()
+
+        role = me.json().get("role", "dealer")
+
+        messagebox.showinfo("Login Successful", f"Welcome {username}! Role: {role}")
+
+        root.destroy()
+        import dummyapp
+        dummyapp.run_app(token, role)
+
+    except Exception as e:
+        messagebox.showerror("Login Error", str(e))
+    finally:
+        loader.stop()
+        btn_login.config(state="normal")
+        btn_register.config(state="normal")
+
+
+# ------------------ Login Handler ------------------
 def login_user():
     username = entry_username.get()
     password = entry_password.get()
 
-    try:
-        data = {"username": username, "password": password}
-        response = requests.post(f"{API_URL}/login", data=data, timeout=10)
-        # Raise exception for bad HTTP status
-        response.raise_for_status()
+    if not username or not password:
+        messagebox.showerror("Error", "Enter username and password")
+        return
 
-        try:
-            resp_json = response.json()
-        except ValueError:
-            messagebox.showerror("Error", f"Server returned invalid response:\n{response.text}")
-            return
+    btn_login.config(state="disabled")
+    btn_register.config(state="disabled")
 
-        token = resp_json.get("access_token")
-        if token:
-            # Fetch role using /me
-            headers = {"Authorization": f"Bearer {token}"}
-            me_resp = requests.get(f"{API_URL}/me", headers=headers)
-            me_resp.raise_for_status()
-            user_info = me_resp.json()
-            role = user_info.get("role", "dealer")
+    loader.grid(row=5, column=0, columnspan=2, pady=10)
+    loader.start()
 
-            messagebox.showinfo("Login Successful", f"Welcome {username}! Role: {role}")
-            root.destroy()
-            import dummyapp
-            dummyapp.run_app(token, role)  # <-- pass role along
-
-        else:
-            messagebox.showerror("Login Failed", resp_json.get("detail", "Unknown error"))
-
-    except requests.exceptions.ConnectionError:
-        messagebox.showerror("Error", "Could not connect to server. The server might be asleep, try again in a few seconds.")
-    except requests.exceptions.Timeout:
-        messagebox.showerror("Error", "Request timed out. Try again.")
-    except requests.exceptions.HTTPError as e:
-        messagebox.showerror("Error", f"HTTP error: {e}")
+    threading.Thread(
+        target=perform_login,
+        args=(username, password, loader, btn_login, btn_register, root),
+        daemon=True
+    ).start()
 
 
-# ------------------ Registration Function ------------------
+# ------------------ REGISTER WINDOW ------------------
 def open_register():
-    reg_win = tk.Toplevel(root)
-    reg_win.title("Register")
+    reg = tk.Toplevel(root)
+    reg.title("Register")
+    reg.geometry("350x250")
+    reg.configure(bg="#1e1e1e")
 
-    tk.Label(reg_win, text="New Username").grid(row=0, column=0)
-    tk.Label(reg_win, text="New Password").grid(row=1, column=0)
+    frame = ttk.Frame(reg, padding=20)
+    frame.pack(expand=True)
 
-    entry_reg_username = tk.Entry(reg_win)
-    entry_reg_password = tk.Entry(reg_win, show="*")
-    entry_reg_username.grid(row=0, column=1)
-    entry_reg_password.grid(row=1, column=1)
+    ttk.Label(frame, text="New Username").grid(row=0, column=0, pady=5)
+    ttk.Label(frame, text="New Password").grid(row=1, column=0, pady=5)
 
-    def register_user():
-        uname = entry_reg_username.get()
-        pwd = entry_reg_password.get()
+    ent_u = ttk.Entry(frame, width=25)
+    ent_p = ttk.Entry(frame, width=25, show="*")
+    ent_u.grid(row=0, column=1, pady=5)
+    ent_p.grid(row=1, column=1, pady=5)
+
+    reg_loader = GIFPlayer(frame, "loading.gif")
+
+    def perform_register(uname, pwd):
         try:
             data = {"username": uname, "password": pwd}
-            response = requests.post(f"{API_URL}/register?username={uname}&password={pwd}")
-            response.raise_for_status()
+            res = requests.post(f"{API_URL}/register", data=data)
+            res.raise_for_status()
 
-            try:
-                resp_json = response.json()
-            except ValueError:
-                messagebox.showerror("Error", f"Server returned invalid response:\n{response.text}")
-                return
+            messagebox.showinfo("Success", "Account created! Login now.")
+            reg.destroy()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+        finally:
+            reg_loader.stop()
+            btn_reg_submit.config(state="normal")
 
-            messagebox.showinfo("Success", resp_json.get("msg", "Registration successful! Please login."))
-            reg_win.destroy()
+    def register_user():
+        uname = ent_u.get()
+        pwd = ent_p.get()
 
-        except requests.exceptions.ConnectionError:
-            messagebox.showerror("Error", "Could not connect to server. The server might be asleep, try again in a few seconds.")
-        except requests.exceptions.Timeout:
-            messagebox.showerror("Error", "Request timed out. Try again.")
-        except requests.exceptions.HTTPError as e:
-            try:
-                error_json = response.json()
-                messagebox.showerror("Error", error_json.get("detail", str(e)))
-            except ValueError:
-                messagebox.showerror("Error", f"HTTP error: {e}")
+        if not uname or not pwd:
+            messagebox.showerror("Error", "Fill all fields.")
+            return
 
-    tk.Button(reg_win, text="Register", command=register_user).grid(row=2, column=0, columnspan=2)
+        btn_reg_submit.config(state="disabled")
+        reg_loader.grid(row=3, column=0, columnspan=2, pady=10)
+        reg_loader.start()
+
+        threading.Thread(
+            target=perform_register,
+            args=(uname, pwd),
+            daemon=True
+        ).start()
+
+    btn_reg_submit = ttk.Button(frame, text="Register", style="Rounded.TButton", command=register_user)
+    btn_reg_submit.grid(row=2, column=0, columnspan=2, pady=10)
 
 
-# ------------------ Tkinter Login Window ------------------
+# ------------------ MAIN UI ------------------
 root = tk.Tk()
 root.title("Login")
+root.geometry("380x280")
+root.configure(bg="#1e1e1e")  # DARK MODE BG
 
-tk.Label(root, text="Username").grid(row=0, column=0)
-tk.Label(root, text="Password").grid(row=1, column=0)
 
-entry_username = tk.Entry(root)
-entry_password = tk.Entry(root, show="*")
-entry_username.grid(row=0, column=1)
-entry_password.grid(row=1, column=1)
+# ------------------ DARK MODE + ROUNDED BUTTONS STYLE ------------------
+style = ttk.Style()
+style.theme_use("clam")
 
-tk.Button(root, text="Login", command=login_user).grid(row=2, column=0, columnspan=2)
-tk.Button(root, text="New User?", command=open_register).grid(row=3, column=0, columnspan=2)
+style.configure(
+    ".",
+    background="#1e1e1e",
+    foreground="#dddddd",
+    fieldbackground="#2c2c2c"
+)
+
+style.configure(
+    "Rounded.TButton",
+    background="#3a7afe",
+    foreground="white",
+    padding=10,
+    borderwidth=0,
+    focusthickness=0,
+    relief="flat"
+)
+
+style.map(
+    "Rounded.TButton",
+    background=[("active", "#2f63d4")]
+)
+
+style.configure("TEntry", padding=5)
+
+
+# ------------------ Layout ------------------
+frame = ttk.Frame(root, padding=20)
+frame.pack(expand=True)
+
+ttk.Label(frame, text="Username").grid(row=0, column=0, pady=5)
+ttk.Label(frame, text="Password").grid(row=1, column=0, pady=5)
+
+entry_username = ttk.Entry(frame, width=28)
+entry_password = ttk.Entry(frame, show="*", width=28)
+entry_username.grid(row=0, column=1, pady=5)
+entry_password.grid(row=1, column=1, pady=5)
+
+btn_login = ttk.Button(frame, text="Login", style="Rounded.TButton", command=login_user)
+btn_register = ttk.Button(frame, text="New User?", style="Rounded.TButton", command=open_register)
+
+btn_login.grid(row=2, column=0, columnspan=2, pady=15)
+btn_register.grid(row=3, column=0, columnspan=2, pady=5)
+
+loader = GIFPlayer(frame, "loading.gif")
 
 root.mainloop()
